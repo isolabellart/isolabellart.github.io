@@ -1,13 +1,5 @@
 {
   "names": {
-    "YOUR_NOSTR_NAME": "f4db5270bd991b17bea1e6d035f45dee392919c29474bbac10342d223c74e0d0"
-  },
-  "relays": {
-    "YOUR_NOSTR_PUBLIC_KEY_IN_HEX_FORMAT": [
-      "wss://nos.lol",
-      "wss://relay.damus.io",
-      "wss://nostr.wine"
-      ...
-    ]
+    "<name>": "f4db5270bd991b17bea1e6d035f45dee392919c29474bbac10342d223c74e0d0"
   }
 }

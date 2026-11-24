@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { ArrowDownLeft, ArrowUpRight, Copy, RefreshCw, Wallet, ShieldAlert, X } from 'lucide-react'
 import { useAuthStore } from '../lib/store/useAuthStore'
+import { useSettingsStore } from '../lib/store/useSettingsStore'
+import {
+  findSparkRelayBackups, publishSparkBackup, getSparkRelayBackupStatuses,
+  deleteSparkRelayBackups, type SparkRelayBackup, type SparkRelayStatus,
+} from '../lib/spark/relayBackup'
 import {
   connectSparkWallet, createRecoveryPhrase, validateRecoveryPhrase,
   isSparkWalletConnected, getSparkInfo, prepareSparkPayment,
@@ -14,6 +19,14 @@ type PreparedPayment = { prepareResponse:unknown; feeSats:number }
 
 export function SparkWalletPage() {
   const pubkey = useAuthStore(s => s.pubkey)
+  const signer = useAuthStore(s => s.signer)
+  const [walletMnemonic,setWalletMnemonic]=useState('')
+  const [backupBusy,setBackupBusy]=useState(false)
+  const [backupMessage,setBackupMessage]=useState('')
+  const [relayStatuses,setRelayStatuses]=useState<SparkRelayStatus[]>([])
+  const [relayBackups,setRelayBackups]=useState<SparkRelayBackup[]>([])
+  const [searchingBackups,setSearchingBackups]=useState(false)
+  const [selectedBackup,setSelectedBackup]=useState('')
   const [connected,setConnected]=useState(isSparkWalletConnected())
   const [balance,setBalance]=useState<number|null>(null)
   const [phrase,setPhrase]=useState('')
@@ -56,7 +69,9 @@ export function SparkWalletPage() {
     if(!pubkey){setError('Sign in to Postilla before setting up Spark.');return}
     setConnecting(true);setError('')
     try{
-      const info=await connectSparkWallet(mnemonic,pubkey)
+      const cleanMnemonic=mnemonic.trim().toLowerCase().replace(/\\s+/g,' ')
+      const info=await connectSparkWallet(cleanMnemonic,pubkey)
+      setWalletMnemonic(cleanMnemonic)
       setBalance(Number(info.balanceSats)||0)
       setConnected(true)
       setPayments(await listSparkPayments())
@@ -65,6 +80,41 @@ export function SparkWalletPage() {
       setShowPhrase(false)
     }catch(e){setError(e instanceof Error?e.message:String(e))}
     finally{setConnecting(false)}
+  }
+  async function backupToRelays(){
+    if(!signer||!signer.canSign||!signer.canEncrypt){setBackupMessage('Your Nostr signer must support signing and NIP-44 encryption.');return}
+    if(!walletMnemonic){setBackupMessage('Reconnect or restore this wallet before creating its relay backup.');return}
+    const writeRelays=useSettingsStore.getState().getWriteRelays()
+    const readRelays=useSettingsStore.getState().getReadRelays()
+    setBackupBusy(true);setBackupMessage('')
+    try{
+      const results=await publishSparkBackup(signer,walletMnemonic,writeRelays)
+      const accepted=results.filter(x=>x.ok).length
+      setBackupMessage(`Encrypted backup confirmed by ${accepted} of ${results.length} write relays.`)
+      setRelayStatuses(await getSparkRelayBackupStatuses(signer,walletMnemonic,[...new Set([...readRelays,...writeRelays])]))
+    }catch(e){setBackupMessage(e instanceof Error?e.message:String(e))}
+    finally{setBackupBusy(false)}
+  }
+  async function searchRelayBackups(){
+    if(!signer||!signer.canEncrypt){setBackupMessage('Sign in with the Nostr identity that created the backup and supports NIP-44.');return}
+    setSearchingBackups(true);setBackupMessage('');setRelayBackups([]);setSelectedBackup('')
+    try{
+      const found=await findSparkRelayBackups(signer,useSettingsStore.getState().getReadRelays(),useSettingsStore.getState().getWriteRelays())
+      setRelayBackups(found)
+      setBackupMessage(found.length?`Found ${found.length} restorable Spark wallet backup(s).`:'No decryptable Spark backup was found on your personal read/write relays.')
+    }catch(e){setBackupMessage(e instanceof Error?e.message:String(e))}
+    finally{setSearchingBackups(false)}
+  }
+  async function removeRelayBackups(){
+    if(!signer||!signer.canSign)return
+    if(!window.confirm('Delete all Spark wallet backups published by this Nostr identity?'))return
+    setBackupBusy(true);setBackupMessage('')
+    try{
+      const results=await deleteSparkRelayBackups(signer,useSettingsStore.getState().getReadRelays(),useSettingsStore.getState().getWriteRelays())
+      setBackupMessage(results.length?`Deletion tombstones confirmed by ${results.filter(x=>x.ok).length} relay(s).`:'No active Spark relay backup was found.')
+      setRelayStatuses([])
+    }catch(e){setBackupMessage(e instanceof Error?e.message:String(e))}
+    finally{setBackupBusy(false)}
   }
   async function prepareSend(){
     setError('');setPrepared(null)
@@ -97,7 +147,9 @@ export function SparkWalletPage() {
   async function disconnect(){
     await disconnectSparkWallet()
     setConnected(false);setBalance(null);setPayments([]);setInvoice('');setInvoiceQr('')
-    setStatus('Disconnected. The recovery phrase was not saved by Postilla Web.')
+    setWalletMnemonic('')
+    setRelayStatuses([])
+    setStatus('Disconnected. The recovery phrase remains only in this page memory and was not saved locally.')
   }
 
   return <div className="min-h-full">
@@ -117,6 +169,17 @@ export function SparkWalletPage() {
         <p className="mt-3 text-xs text-[var(--postilla-secondary)]">For this preview, Postilla Web does not save your recovery phrase to localStorage or sessionStorage. You must keep your own offline backup and re-enter the phrase after a full browser reload.</p>
       </div>
       <button onClick={startNewWallet} disabled={!hasAccount||!hasBreezApiKey()} className="w-full rounded-xl bg-[var(--postilla-accent)] p-3 text-sm font-semibold text-[#1B1916] disabled:opacity-40">Create a new wallet</button>
+      <div className="rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] p-4 space-y-3">
+        <h3 className="font-semibold">Restore from your Nostr relays</h3>
+        <p className="text-xs text-[var(--postilla-secondary)]">Search encrypted Postilla Spark backups published by this Nostr identity. The recovery phrase is decrypted locally through your Nostr signer and is never sent to Breez as a backup record.</p>
+        <button onClick={()=>void searchRelayBackups()} disabled={!signer?.canEncrypt||searchingBackups} className="w-full rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-sm disabled:opacity-40">{searchingBackups?'Searching personal relays…':'Search relay backups'}</button>
+        {relayBackups.map((backup,index)=><div key={backup.dTag} className="rounded-lg border border-[var(--postilla-border)] p-3 text-sm">
+          <div className="font-medium">Spark wallet {backup.walletId?backup.walletId.slice(0,8):`#${index+1}`}</div>
+          <p className="mt-1 text-xs text-[var(--postilla-secondary)]">Backup date: {new Date(backup.createdAt*1000).toLocaleString()}</p>
+          <button onClick={()=>setSelectedBackup(backup.dTag)} className={`mt-2 w-full rounded-lg px-3 py-2 text-xs ${selectedBackup===backup.dTag?'bg-[var(--postilla-accent)] text-[#1B1916]':'border border-[var(--postilla-border)]'}`}>{selectedBackup===backup.dTag?'Selected':'Select this wallet'}</button>
+          {selectedBackup===backup.dTag&&<button onClick={()=>void connect(backup.mnemonic)} disabled={connecting||!hasBreezApiKey()} className="mt-2 w-full rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-xs font-semibold text-[#1B1916] disabled:opacity-40">{connecting?'Restoring…':'Restore selected wallet'}</button>}
+        </div>)}
+      </div>
       <div className="rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] p-4 space-y-3">
         <h3 className="font-semibold">Restore an existing wallet</h3>
         <textarea value={phrase} onChange={e=>setPhrase(e.target.value)} rows={3} placeholder="Enter your 12 / 15 / 18 / 21 / 24 word recovery phrase" className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-3 text-sm"/>
@@ -139,6 +202,15 @@ export function SparkWalletPage() {
         <p className="text-xs uppercase tracking-wider text-[var(--postilla-secondary)]">Available balance</p>
         <p className="my-2 text-3xl font-semibold tabular-nums">{formattedBalance} <span className="text-sm font-normal">sats</span></p>
         <div className="flex justify-center gap-2"><button onClick={()=>void refresh()} disabled={loading} className="rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-xs">Refresh balance</button><button onClick={()=>void disconnect()} className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300">Disconnect</button></div>
+      </section>
+      <section className="rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] p-4 space-y-3">
+        <h2 className="font-semibold">Encrypted Nostr relay backup</h2>
+        <p className="text-xs text-[var(--postilla-secondary)]">Same backup format as Postilla Android: NIP-78 kind 30078, NIP-44 encrypted to your own Nostr public key. Only your personal NIP-65 read/write relays are used.</p>
+        <button onClick={()=>void backupToRelays()} disabled={backupBusy||!walletMnemonic||!signer?.canSign||!signer?.canEncrypt} className="w-full rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-sm font-semibold text-[#1B1916] disabled:opacity-40">{backupBusy?'Working…':'Publish encrypted backup to write relays'}</button>
+        <button onClick={()=>void searchRelayBackups()} disabled={backupBusy||!signer?.canEncrypt} className="w-full rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-sm disabled:opacity-40">Check / find backups on my relays</button>
+        <button onClick={()=>void removeRelayBackups()} disabled={backupBusy||!signer?.canSign} className="w-full rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Delete my Spark relay backups</button>
+        {backupMessage&&<p className="rounded-lg border border-[var(--postilla-border)] p-2 text-xs">{backupMessage}</p>}
+        {relayStatuses.length>0&&<div className="space-y-1">{relayStatuses.map(item=><div key={item.relay} className="flex items-center justify-between gap-2 text-xs"><span className="truncate text-[var(--postilla-secondary)]">{item.relay}</span><span className={item.hasBackup?'text-emerald-500':'text-[var(--postilla-secondary)]'}>{item.hasBackup?'Backup found':'Not found'}</span></div>)}</div>}
       </section>
       <section className="rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] p-4 space-y-3">
         <h2 className="flex items-center gap-2 font-semibold"><ArrowUpRight className="h-4 w-4"/>Send Lightning payment</h2>

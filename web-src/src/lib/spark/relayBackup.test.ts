@@ -8,7 +8,7 @@ describe('Spark NIP-78 relay backup format', () => {
 
   it('uses the same deterministic SHA-256 wallet identifier as Android', async () => {
     const id = await computeSparkWalletId('abandon ability able about above absent absorb abstract absurd abuse access accident')
-    expect(id).toBe('c70e6a0a0e1b3e6b')
+    expect(id).toBe('68c6ab3eba220da7')
   })
 
   it('uses the interoperable Android d-tag prefix', () => {

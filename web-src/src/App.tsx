@@ -13,6 +13,7 @@ import { BookmarksPage } from './pages/BookmarksPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { MarketplacePage } from './pages/MarketplacePage'
 import { VideoGalleryPage } from './pages/VideoGalleryPage'
+import { SparkWalletPage } from './pages/SparkWalletPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -28,15 +29,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#0e0e11] text-[#f4f1ea] flex flex-col items-center justify-center p-6 text-center gap-3">
-          <img src="/firewisp-logo.png" alt="Fire Wisp" className="w-12 h-12 rounded-xl" />
+        <div className="min-h-screen bg-[var(--postilla-bg)] text-[var(--postilla-text)] flex flex-col items-center justify-center p-6 text-center gap-3">
+          <img src={import.meta.env.BASE_URL + "postilla-mark.svg"} alt="Postilla" className="w-12 h-12 rounded-xl" />
           <h1 className="text-lg font-bold">Something went wrong</h1>
           <p className="text-sm text-[#9a9890] max-w-sm">
-            Fire Wisp hit an unexpected rendering error. Reloading will recover cleanly.
+            Postilla Web encountered an unexpected rendering error. Reloading will recover cleanly.
           </p>
           <button
             onClick={() => window.location.assign(import.meta.env.BASE_URL)}
-            className="px-4 py-2 rounded-xl bg-[#e8590c] hover:bg-[#d9480f] text-sm font-semibold cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-[var(--postilla-accent)] hover:bg-[var(--postilla-accent-hover)] text-sm font-semibold cursor-pointer"
           >
             Back to Feed
           </button>
@@ -87,6 +88,7 @@ export function App() {
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
             <Route path="/videos" element={<VideoGalleryPage />} />
+            <Route path="/wallet" element={<SparkWalletPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

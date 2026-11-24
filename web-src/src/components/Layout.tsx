@@ -16,11 +16,11 @@ import {
   Radio,
   ShoppingBag,
   Video,
+  Wallet,
 } from 'lucide-react'
 import {
   ANDROID_APP_URL,
   DEFAULT_BLOSSOM_PRIMARY,
-  FIREWISP_RELAY,
   ZAPSTORE_URL,
 } from '../lib/constants'
 import { useAuthStore } from '../lib/store/useAuthStore'
@@ -42,7 +42,6 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const connectedCount = Object.values(relayStatuses).filter((s) => s === 'connected').length
   const totalCount = Math.max(Object.keys(relayStatuses).length, 1)
-  const firewispRelayUp = relayStatuses[FIREWISP_RELAY] === 'connected'
 
   const navItems = [
     { to: '/', label: 'Feed', icon: Flame, end: true },
@@ -54,6 +53,7 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/settings', label: 'Settings', icon: Settings },
     { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
     { to: '/videos', label: 'Videos', icon: Video },
+    { to: '/wallet', label: 'Spark Wallet', icon: Wallet },
   ]
 
   return (
@@ -203,16 +203,15 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
             <div className="text-xs text-[var(--postilla-secondary)] space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="truncate font-mono text-[11px]">firewisp.relay.rtard.de</span>
+                <span className="truncate font-mono text-[11px]">Nostr relay connections</span>
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    firewispRelayUp ? 'bg-emerald-400' : 'bg-amber-400'
+                    connectedCount > 0 ? 'bg-emerald-400' : 'bg-amber-400'
                   }`}
                 />
               </div>
               <p className="text-[11px] text-[var(--postilla-secondary)] leading-relaxed">
-                Anti-spam community relay with NIP-13 PoW (12b+) &amp; rate limiting. Media uploads
-                default to{' '}
+                Postilla Web connects directly to your selected public Nostr relays. Media uploads default to{' '}
                 <span className="font-mono text-[var(--postilla-secondary)]">
                   {DEFAULT_BLOSSOM_PRIMARY.replace('https://', '')}
                 </span>{' '}
@@ -265,6 +264,7 @@ export function Layout({ children }: { children: ReactNode }) {
           { to: '/notifications', icon: Bell, label: 'Alerts' },
           { to: '/messages', icon: Mail, label: 'DMs' },
           { to: '/settings', icon: Settings, label: 'Settings' },
+          { to: '/wallet', icon: Wallet, label: 'Wallet' },
           { to: '/marketplace', icon: ShoppingBag, label: 'Market' },
           { to: '/videos', icon: Video, label: 'Videos' },
         ].map(({ to, icon: Icon, label, end }) => (

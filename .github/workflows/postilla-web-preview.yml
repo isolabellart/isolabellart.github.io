@@ -1,0 +1,76 @@
+name: Postilla Web preview
+
+on:
+  push:
+    branches:
+      - staging/postilla-web-preview-20261124
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: postilla-web-preview
+  cancel-in-progress: true
+
+jobs:
+  build-test-publish-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging source
+        uses: actions/checkout@v4
+        with:
+          ref: staging/postilla-web-preview-20261124
+          path: source
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: source/web-src/package.json
+
+      - name: Install dependencies
+        working-directory: source/web-src
+        run: npm install --no-audit --no-fund
+
+      - name: Type check
+        working-directory: source/web-src
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: source/web-src
+        run: npm test
+
+      - name: Build Postilla Web
+        working-directory: source/web-src
+        env:
+          VITE_BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
+          VITE_POSTILLA_TRANSLATION_API: ${{ vars.POSTILLA_TRANSLATION_API }}
+        run: npm run build
+
+      - name: Checkout existing GitHub Pages site
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: pages-site
+          fetch-depth: 0
+
+      - name: Replace only the unlinked preview directory
+        run: |
+          rm -rf pages-site/web-preview
+          mkdir -p pages-site/web-preview
+          cp -a source/web-src/dist/. pages-site/web-preview/
+
+      - name: Publish preview without changing the landing page
+        working-directory: pages-site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A web-preview
+          if git diff --cached --quiet; then
+            echo "Preview output is unchanged."
+            exit 0
+          fi
+          git commit -m "deploy(web): update unlinked Postilla browser preview"
+          git push origin HEAD:main

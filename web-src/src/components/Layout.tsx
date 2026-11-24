@@ -21,6 +21,7 @@ import {
 import {
   ANDROID_APP_URL,
   DEFAULT_BLOSSOM_PRIMARY,
+  FIREWISP_RELAY,
   ZAPSTORE_URL,
 } from '../lib/constants'
 import { useAuthStore } from '../lib/store/useAuthStore'
@@ -274,7 +275,7 @@ export function Layout({ children }: { children: ReactNode }) {
             end={end}
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 text-[10px] px-2 py-0.5 ${
-                isActive ? 'text-[#ff8a3d]' : 'text-[var(--postilla-secondary)]'
+                isActive ? 'text-[var(--postilla-accent)]' : 'text-[var(--postilla-secondary)]'
               }`
             }
           >
@@ -286,7 +287,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* PoW Mining Status Pill */}
       {powBusyMessage && (
-        <div className="fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#1a1c24] border border-[var(--postilla-accent)]/40 shadow-xl flex items-center gap-2 text-xs text-[var(--postilla-accent)]">
+        <div className="fixed bottom-16 md:bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[var(--postilla-surface)] border border-[var(--postilla-accent)]/40 shadow-xl flex items-center gap-2 text-xs text-[var(--postilla-accent)]">
           <Cpu className="w-4 h-4 animate-pulse" />
           {powBusyMessage}
         </div>
@@ -296,7 +297,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {toastMessage && !powBusyMessage && (
         <button
           onClick={() => setToast(null)}
-          className="fixed bottom-16 md:bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl bg-[#1a1c24] border border-[#2f3344] shadow-xl text-xs text-[var(--postilla-text)] hover:border-[var(--postilla-accent)] cursor-pointer"
+          className="fixed bottom-16 md:bottom-5 right-5 z-50 px-4 py-2.5 rounded-xl bg-[#1a1c24] border border-[var(--postilla-border)] shadow-xl text-xs text-[var(--postilla-text)] hover:border-[var(--postilla-accent)] cursor-pointer"
         >
           {toastMessage}
         </button>

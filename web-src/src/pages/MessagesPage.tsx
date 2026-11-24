@@ -6,6 +6,7 @@ import { useAuthStore } from '../lib/store/useAuthStore'
 import { useNostrStore } from '../lib/store/useNostrStore'
 import { useSettingsStore } from '../lib/store/useSettingsStore'
 import { sanitizeHttpUrl } from '../lib/sanitize'
+import { translateTextWithDeepL } from '../lib/translation/deepl'
 import { Avatar } from '../components/Avatar'
 
 const URL_RE = /(https?:\/\/[^\s]+)/g
@@ -29,6 +30,24 @@ export function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [revealedUrls, setRevealedUrls] = useState<Record<string, boolean>>({})
+  const [translated, setTranslated] = useState<Record<string, string>>({})
+  const [showTranslated, setShowTranslated] = useState<Record<string, boolean>>({})
+  const [translatingId, setTranslatingId] = useState<string | null>(null)
+  const [translationError, setTranslationError] = useState<string | null>(null)
+
+  const translateMessage = async (message: typeof activeMessages[number]) => {
+    const key = (() => { try { return sessionStorage.getItem('postilla_deepl_api_key') || '' } catch { return '' } })()
+    if (!key) { setTranslationError('Add your DeepL API key in Settings first.'); return }
+    if (translated[message.id]) { setShowTranslated(v => ({ ...v, [message.id]: !v[message.id] })); return }
+    setTranslatingId(message.id); setTranslationError(null)
+    try {
+      const target = (() => { try { return sessionStorage.getItem('postilla_deepl_target') || 'IT' } catch { return 'IT' } })()
+      const result = await translateTextWithDeepL(message.content, key, target)
+      setTranslated(v => ({ ...v, [message.id]: result }))
+      setShowTranslated(v => ({ ...v, [message.id]: true }))
+    } catch (e) { setTranslationError(e instanceof Error ? e.message : String(e)) }
+    finally { setTranslatingId(null) }
+  }
 
   useEffect(() => {
     const paramPeer = searchParams.get('peer')
@@ -228,6 +247,7 @@ export function MessagesPage() {
                     `${selectedPeer.slice(0, 12)}…`}
                 </span>
               </div>
+              {translationError && <div className="px-4 py-2 text-xs text-red-300">{translationError}</div>}
               <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
                 {activeMessages.map((m) => {
                   const mine = m.senderPubkey === pubkey?.toLowerCase()

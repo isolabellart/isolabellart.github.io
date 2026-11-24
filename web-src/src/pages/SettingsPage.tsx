@@ -6,6 +6,7 @@ import {
   VolumeX,
   Wallet,
   Shield,
+  Languages,
   Plus,
   Trash2,
   RotateCcw,
@@ -35,6 +36,11 @@ export function SettingsPage() {
   const [exported, setExported] = useState<string | null>(null)
   const [exportErr, setExportErr] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [deepLApiKey, setDeepLApiKey] = useState(() => { try { return sessionStorage.getItem('postilla_deepl_api_key') || '' } catch { return '' } })
+  const [deepLTarget, setDeepLTarget] = useState(() => { try { return sessionStorage.getItem('postilla_deepl_target') || (navigator.language || 'it').split('-')[0].toUpperCase() } catch { return 'IT' } })
+  const [deepLStatus, setDeepLStatus] = useState('')
+  const saveDeepL = () => { try { sessionStorage.setItem('postilla_deepl_api_key', deepLApiKey.trim()); sessionStorage.setItem('postilla_deepl_target', deepLTarget); setDeepLStatus('Key kept for this browser session only.') } catch { setDeepLStatus('Session storage is unavailable in this browser.') } }
+  const clearDeepL = () => { try { sessionStorage.removeItem('postilla_deepl_api_key'); sessionStorage.removeItem('postilla_deepl_target') } catch {}; setDeepLApiKey(''); setDeepLStatus('DeepL key cleared.') }
 
   return (
     <div className="divide-y divide-[var(--postilla-border)]">
@@ -44,6 +50,17 @@ export function SettingsPage() {
           All preferences stay strictly in your browser. Zero telemetry.
         </p>
       </div>
+
+      <section className="p-4 space-y-3">
+        <h2 className="font-semibold text-sm flex items-center gap-2"><Languages className="w-4 h-4 text-[var(--postilla-accent)]"/>DeepL translation</h2>
+        <input type="password" autoComplete="off" value={deepLApiKey} onChange={e=>setDeepLApiKey(e.target.value)} placeholder="DeepL API key" className="w-full rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-3 py-2 text-xs font-mono focus:outline-none focus:border-[var(--postilla-accent)]" />
+        <select value={deepLTarget} onChange={e=>setDeepLTarget(e.target.value)} className="w-full rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-3 py-2 text-xs">
+          <option value="IT">Italian</option><option value="EN">English</option><option value="FR">French</option><option value="DE">German</option><option value="ES">Spanish</option><option value="PT-BR">Portuguese (Brazil)</option><option value="JA">Japanese</option><option value="NL">Dutch</option>
+        </select>
+        <div className="flex gap-2"><button onClick={saveDeepL} className="rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-xs font-semibold text-[#1B1916]">Keep for this session</button><button onClick={clearDeepL} className="rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-xs">Clear key</button></div>
+        {deepLStatus && <p className="text-xs text-[var(--postilla-secondary)]">{deepLStatus}</p>}
+        <p className="text-xs text-[var(--postilla-secondary)]">The key is kept in session storage and is removed when the browser session ends. Translation requires the Postilla backend proxy; it is not sent directly to DeepL from this page. Browser storage is not equivalent to Android encrypted preferences.</p>
+      </section>
 
       {/* Relays */}
       <section className="p-4 space-y-3">

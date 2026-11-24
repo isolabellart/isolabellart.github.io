@@ -19,7 +19,7 @@ export interface SparkRelayStatus {
 }
 
 export function normalizeSparkMnemonic(value: string): string {
-  return value.trim().toLowerCase().replace(/\\s+/g, ' ')
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
 export async function computeSparkWalletId(mnemonic: string): Promise<string> {

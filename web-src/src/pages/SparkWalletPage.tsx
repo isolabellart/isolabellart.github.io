@@ -69,7 +69,7 @@ export function SparkWalletPage() {
     if(!pubkey){setError('Sign in to Postilla before setting up Spark.');return}
     setConnecting(true);setError('')
     try{
-      const cleanMnemonic=mnemonic.trim().toLowerCase().replace(/\\s+/g,' ')
+      const cleanMnemonic=mnemonic.trim().toLowerCase().replace(/\s+/g,' ')
       const info=await connectSparkWallet(cleanMnemonic,pubkey)
       setWalletMnemonic(cleanMnemonic)
       setBalance(Number(info.balanceSats)||0)

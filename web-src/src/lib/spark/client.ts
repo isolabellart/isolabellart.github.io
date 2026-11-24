@@ -1,5 +1,5 @@
 import { generateMnemonic, validateMnemonic } from '@scure/bip39'
-import { wordlist } from '@scure/bip39/wordlists/english.js'
+import { wordlist } from '@scure/bip39/wordlists/english'
 
 type SparkPayment = {
   id: string

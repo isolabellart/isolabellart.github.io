@@ -268,7 +268,7 @@ export function FeedPage() {
           {tab === 'following' && pubkey && (
             <button
               onClick={() => setShowRepliesInFollows(!showRepliesInFollows)}
-              className="text-[11px] text-[#ff8a3d] hover:underline cursor-pointer"
+              className="text-[11px] text-[var(--postilla-accent)] hover:underline cursor-pointer"
             >
               {showRepliesInFollows ? 'Hide replies' : 'Show replies'}
             </button>
@@ -276,7 +276,7 @@ export function FeedPage() {
           {tab === 'global' && (
             <button
               onClick={() => setSpamFilterEnabled(!spamFilterEnabled)}
-              className="text-[11px] text-[#ff8a3d] hover:underline cursor-pointer"
+              className="text-[11px] text-[var(--postilla-accent)] hover:underline cursor-pointer"
             >
               {spamFilterEnabled ? 'Pause' : 'Enable'}
             </button>
@@ -313,7 +313,7 @@ export function FeedPage() {
         <div className="py-16 px-6 text-center space-y-2">
           <p className="text-sm text-[var(--postilla-secondary)] font-medium">
             {tab === 'firewisp'
-              ? 'No posts on firewisp.relay.rtard.de yet — be the first to ignite it!'
+              ? 'No posts found on the selected relay yet.'
               : tab === 'following'
                 ? pubkey
                   ? 'No recent notes from your follows loaded yet.'

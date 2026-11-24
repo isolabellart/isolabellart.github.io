@@ -1,6 +1,6 @@
 import type { Event } from 'nostr-tools/pure'
-import { nostrPool, type PublishResult } from './pool'
-import type { FireWispSigner } from './signer'
+import { nostrPool, type PublishResult } from '../nostr/pool'
+import type { FireWispSigner } from '../nostr/signer'
 
 export const SPARK_BACKUP_KIND = 30078
 const D_TAG_PREFIX = 'spark-wallet-backup'

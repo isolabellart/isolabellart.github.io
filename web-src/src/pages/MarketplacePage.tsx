@@ -39,7 +39,7 @@ export function MarketplacePage(){
    const relays=[...new Set([...settings.getReadRelays(),...MARKETPLACE_READ_RELAYS])]
    if(!relays.length)throw new Error('No Marketplace read relay is configured.')
    const events=await nostrPool.query(relays,{kinds:[...MARKETPLACE_KINDS],limit:1000},12000)
-   setListings(latestMarketplaceListings(events,pubkey));await loadWishlist()
+   setListings(latestMarketplaceListings(events,pubkey || undefined));await loadWishlist()
   }catch(e){setError(e instanceof Error?e.message:String(e))}
   finally{setLoading(false)}
  }

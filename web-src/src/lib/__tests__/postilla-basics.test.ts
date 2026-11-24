@@ -6,8 +6,8 @@ import {parseNoteContent,extractImetaMap,extractEventHashtags} from '../nostr/co
 import {sanitizeHttpUrl,sanitizeRelayUrl,isPublicHostname} from '../sanitize'
 import {evaluateNoteSpam,isTopLevelNote} from '../nostr/spamFilter'
 import {buildCandidateServers} from '../nostr/blossom'
-import {latestMarketplaceListings,parseMarketplaceListing,MARKETPLACE_READ_RELAYS,MARKETPLACE_WRITE_RELAYS} from './marketplace'
-import {latestAddressableVideoRevisions,parseNip71Video} from './nip71'
+import {latestMarketplaceListings,parseMarketplaceListing,MARKETPLACE_READ_RELAYS,MARKETPLACE_WRITE_RELAYS} from '../nostr/marketplace'
+import {latestAddressableVideoRevisions,parseNip71Video} from '../nostr/nip71'
 
 describe('Postilla browser client security and media foundations',()=>{
  it('rejects unsafe URLs and private network destinations',()=>{
@@ -38,8 +38,8 @@ describe('Postilla browser client security and media foundations',()=>{
  })
  it('filters obvious scam notes and recognises top-level notes',()=>{
   expect(evaluateNoteSpam({id:'a'.repeat(64),pubkey:'b'.repeat(64),kind:1,content:'Claim your free bitcoin airdrop now https://t.me/scam',tags:[]}).isSpam).toBe(true)
-  expect(isTopLevelNote({kind:1,tags:[]})).toBe(true)
-  expect(isTopLevelNote({kind:1,tags:[['e','c'.repeat(64),'','reply']]})).toBe(false)
+  expect(isTopLevelNote({tags:[]})).toBe(true)
+  expect(isTopLevelNote({tags:[['e','c'.repeat(64),'','reply']]})).toBe(false)
  })
 })
 

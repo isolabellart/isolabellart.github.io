@@ -14,6 +14,8 @@ import {
   Cpu,
   ExternalLink,
   Radio,
+  ShoppingBag,
+  Video,
 } from 'lucide-react'
 import {
   ANDROID_APP_URL,
@@ -50,6 +52,8 @@ export function Layout({ children }: { children: ReactNode }) {
     { to: '/bookmarks', label: 'Bookmarks', icon: Bookmark },
     ...(pubkey ? [{ to: `/p/${pubkey}`, label: 'Profile', icon: User }] : []),
     { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
+    { to: '/videos', label: 'Videos', icon: Video },
   ]
 
   return (
@@ -261,6 +265,8 @@ export function Layout({ children }: { children: ReactNode }) {
           { to: '/notifications', icon: Bell, label: 'Alerts' },
           { to: '/messages', icon: Mail, label: 'DMs' },
           { to: '/settings', icon: Settings, label: 'Settings' },
+          { to: '/marketplace', icon: ShoppingBag, label: 'Market' },
+          { to: '/videos', icon: Video, label: 'Videos' },
         ].map(({ to, icon: Icon, label, end }) => (
           <NavLink
             key={to}

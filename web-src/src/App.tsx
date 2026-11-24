@@ -11,6 +11,8 @@ import { MessagesPage } from './pages/MessagesPage'
 import { SearchPage } from './pages/SearchPage'
 import { BookmarksPage } from './pages/BookmarksPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { MarketplacePage } from './pages/MarketplacePage'
+import { VideoGalleryPage } from './pages/VideoGalleryPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -83,6 +85,8 @@ export function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/marketplace" element={<MarketplacePage />} />
+            <Route path="/videos" element={<VideoGalleryPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

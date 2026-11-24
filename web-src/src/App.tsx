@@ -1,5 +1,5 @@
 import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuthStore } from './lib/store/useAuthStore'
 import { useNostrStore } from './lib/store/useNostrStore'
 import { Layout } from './components/Layout'
@@ -75,7 +75,7 @@ export function App() {
 
   return (
     <ErrorBoundary>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
+      <HashRouter>
         <Layout>
           <Routes>
             <Route path="/" element={<FeedPage />} />
@@ -92,7 +92,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>
-      </BrowserRouter>
+      </HashRouter>
     </ErrorBoundary>
   )
 }

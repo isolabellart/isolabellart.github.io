@@ -1,0 +1,7 @@
+@import "tailwindcss";
+:root,:root[data-theme="dark"]{color-scheme:dark;--postilla-bg:#1B1916;--postilla-surface:#24211E;--postilla-inset:#302C27;--postilla-border:#38332D;--postilla-border-strong:#50483F;--postilla-text:#F4EBDD;--postilla-secondary:#B8AEA1;--postilla-accent:#F08A32;--postilla-accent-hover:#F6A45E}
+:root[data-theme="light"]{color-scheme:light;--postilla-bg:#F4EBDD;--postilla-surface:#FFFAF1;--postilla-inset:#EAE1D3;--postilla-border:#D9CFC0;--postilla-border-strong:#BEB1A0;--postilla-text:#1B1916;--postilla-secondary:#6C645A;--postilla-accent:#A65318;--postilla-accent-hover:#85410F}
+@layer base{html,body,#root{min-height:100%}body{background:var(--postilla-bg);color:var(--postilla-text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;transition:background-color .15s ease,color .15s ease}button,input,textarea,select{font:inherit}::selection{background:var(--postilla-accent);color:var(--postilla-bg)}::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:var(--postilla-bg)}::-webkit-scrollbar-thumb{background:var(--postilla-border-strong);border-radius:4px}}
+.ember-gradient{background:var(--postilla-accent)}
+.postilla-wordmark-light{display:block}.postilla-wordmark-dark{display:none}
+:root[data-theme="light"] .postilla-wordmark-light{display:none}:root[data-theme="light"] .postilla-wordmark-dark{display:block}

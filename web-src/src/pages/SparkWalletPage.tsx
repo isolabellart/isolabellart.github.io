@@ -5,7 +5,7 @@ import { useAuthStore } from '../lib/store/useAuthStore'
 import { useSettingsStore } from '../lib/store/useSettingsStore'
 import {
   findSparkRelayBackups, publishSparkBackup, getSparkRelayBackupStatuses,
-  deleteSparkRelayBackups, type SparkRelayBackup, type SparkRelayStatus,
+  deleteSparkRelayBackup, type SparkRelayBackup, type SparkRelayStatus,
 } from '../lib/spark/relayBackup'
 import {
   connectSparkWallet, createRecoveryPhrase, validateRecoveryPhrase,
@@ -106,12 +106,12 @@ export function SparkWalletPage() {
     finally{setSearchingBackups(false)}
   }
   async function removeRelayBackups(){
-    if(!signer||!signer.canSign)return
-    if(!window.confirm('Delete all Spark wallet backups published by this Nostr identity?'))return
+    if(!signer||!signer.canSign||!walletMnemonic)return
+    if(!window.confirm('Delete the relay backup for this Spark wallet?'))return
     setBackupBusy(true);setBackupMessage('')
     try{
-      const results=await deleteSparkRelayBackups(signer,useSettingsStore.getState().getReadRelays(),useSettingsStore.getState().getWriteRelays())
-      setBackupMessage(results.length?`Deletion tombstones confirmed by ${results.filter(x=>x.ok).length} relay(s).`:'No active Spark relay backup was found.')
+      const results=await deleteSparkRelayBackup(signer,walletMnemonic,useSettingsStore.getState().getReadRelays(),useSettingsStore.getState().getWriteRelays())
+      setBackupMessage(results.length?`Deletion tombstone confirmed by ${results.filter(x=>x.ok).length} relay(s).`:'No active backup for this wallet was found.')
       setRelayStatuses([])
     }catch(e){setBackupMessage(e instanceof Error?e.message:String(e))}
     finally{setBackupBusy(false)}
@@ -208,7 +208,7 @@ export function SparkWalletPage() {
         <p className="text-xs text-[var(--postilla-secondary)]">Same backup format as Postilla Android: NIP-78 kind 30078, NIP-44 encrypted to your own Nostr public key. Only your personal NIP-65 read/write relays are used.</p>
         <button onClick={()=>void backupToRelays()} disabled={backupBusy||!walletMnemonic||!signer?.canSign||!signer?.canEncrypt} className="w-full rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-sm font-semibold text-[#1B1916] disabled:opacity-40">{backupBusy?'Working…':'Publish encrypted backup to write relays'}</button>
         <button onClick={()=>void searchRelayBackups()} disabled={backupBusy||!signer?.canEncrypt} className="w-full rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-sm disabled:opacity-40">Check / find backups on my relays</button>
-        <button onClick={()=>void removeRelayBackups()} disabled={backupBusy||!signer?.canSign} className="w-full rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Delete my Spark relay backups</button>
+        <button onClick={()=>void removeRelayBackups()} disabled={backupBusy||!signer?.canSign} className="w-full rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300 disabled:opacity-40">Delete this wallet's relay backup</button>
         {backupMessage&&<p className="rounded-lg border border-[var(--postilla-border)] p-2 text-xs">{backupMessage}</p>}
         {relayStatuses.length>0&&<div className="space-y-1">{relayStatuses.map(item=><div key={item.relay} className="flex items-center justify-between gap-2 text-xs"><span className="truncate text-[var(--postilla-secondary)]">{item.relay}</span><span className={item.hasBackup?'text-emerald-500':'text-[var(--postilla-secondary)]'}>{item.hasBackup?'Backup found':'Not found'}</span></div>)}</div>}
       </section>

@@ -143,31 +143,31 @@ export async function getSparkRelayBackupStatuses(
   }))
 }
 
-export async function deleteSparkRelayBackups(
+export async function deleteSparkRelayBackup(
   signer: FireWispSigner,
+  mnemonic: string,
   readRelays: string[],
   writeRelays: string[],
 ): Promise<PublishResult[]> {
   if (!signer.canSign) throw new Error('The active Nostr signer cannot delete relay backups.')
   const relays = [...new Set([...readRelays, ...writeRelays])]
+  if (relays.length === 0) throw new Error('No personal read/write relays are configured.')
+  const dTag = sparkBackupDTag(await computeSparkWalletId(mnemonic))
   const events = await nostrPool.query(relays, {
     kinds: [SPARK_BACKUP_KIND],
     authors: [signer.pubkey],
+    '#d': [dTag],
   }, 7000)
-  const dTags = [...new Set(events.filter(event => isSparkBackup(event) && !isDeleted(event)).map(getDTag).filter((tag): tag is string => Boolean(tag)))]
-  if (dTags.length === 0) return []
-  const results: PublishResult[] = []
-  for (const dTag of dTags) {
-    const tombstone = await signer.signEvent({
-      kind: SPARK_BACKUP_KIND,
-      created_at: Math.floor(Date.now() / 1000),
-      content: '',
-      tags: [['d', dTag], ['deleted', 'true']],
-    })
-    results.push(...await nostrPool.publish([...new Set([...readRelays, ...writeRelays])], tombstone))
-  }
+  if (!events.some(event => getDTag(event) === dTag && !isDeleted(event))) return []
+  const tombstone = await signer.signEvent({
+    kind: SPARK_BACKUP_KIND,
+    created_at: Math.floor(Date.now() / 1000),
+    content: '',
+    tags: [['d', dTag], ['deleted', 'true']],
+  })
+  const results = await nostrPool.publish(relays, tombstone)
   if (!results.some(result => result.ok)) {
-    throw new Error('No relay confirmed deletion of the Spark backups.')
+    throw new Error('No relay confirmed deletion of this Spark wallet backup.')
   }
   return results
 }

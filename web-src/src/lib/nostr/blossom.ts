@@ -2,6 +2,8 @@ import { bytesToHex } from 'nostr-tools/utils'
 import type { FireWispSigner } from './signer'
 import {
   MAX_BLOSSOM_UPLOAD_BYTES,
+  DEFAULT_BLOSSOM_FALLBACK,
+  DEFAULT_BLOSSOM_PRIMARY,
 } from '../constants'
 import { sanitizeBlossomUrl, sanitizeHttpUrl } from '../sanitize'
 

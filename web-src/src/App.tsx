@@ -14,6 +14,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { MarketplacePage } from './pages/MarketplacePage'
 import { VideoGalleryPage } from './pages/VideoGalleryPage'
 import { SparkWalletPage } from './pages/SparkWalletPage'
+import { ArticlesPage } from './pages/ArticlesPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -87,6 +88,8 @@ export function App() {
             <Route path="/bookmarks" element={<BookmarksPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
+            <Route path="/articles" element={<ArticlesPage />} />
+            <Route path="/articles" element={<ArticlesPage />} />
             <Route path="/videos" element={<VideoGalleryPage />} />
             <Route path="/wallet" element={<SparkWalletPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -13,6 +13,10 @@ const STORAGE_KEY = 'postilla_web_settings_v1'
 export interface SettingsState {
   relays: RelayEntry[]
   blossomServers: string[]
+  dmRelays: string[]
+  searchRelays: string[]
+  language: 'en' | 'it'
+  encryptedNwc: string | null
   notePowEnabled: boolean
   notePowBits: number
   reactionPowEnabled: boolean
@@ -30,9 +34,19 @@ export interface SettingsState {
   removeRelay: (url: string) => void
   toggleRelayMode: (url: string, field: 'read' | 'write') => void
   resetRelays: () => void
+  setRelays: (relays: RelayEntry[]) => void
 
   addBlossomServer: (url: string) => boolean
   removeBlossomServer: (url: string) => void
+  setBlossomServers: (urls: string[]) => void
+  addDmRelay: (url: string) => boolean
+  removeDmRelay: (url: string) => void
+  setDmRelays: (urls: string[]) => void
+  addSearchRelay: (url: string) => boolean
+  removeSearchRelay: (url: string) => void
+  setSearchRelays: (urls: string[]) => void
+  setLanguage: (language: 'en' | 'it') => void
+  setEncryptedNwc: (ciphertext: string | null) => void
 
   setNotePowEnabled: (enabled: boolean) => void
   setNotePowBits: (bits: number) => void
@@ -58,6 +72,10 @@ export interface SettingsState {
 interface PersistedSettings {
   relays: RelayEntry[]
   blossomServers: string[]
+  dmRelays: string[]
+  searchRelays: string[]
+  language: 'en' | 'it'
+  encryptedNwc: string | null
   notePowEnabled: boolean
   notePowBits: number
   reactionPowEnabled: boolean
@@ -76,6 +94,10 @@ function loadInitial(): PersistedSettings & { nwcUri: string } {
   const defaults: PersistedSettings & { nwcUri: string } = {
     relays: DEFAULT_RELAYS,
     blossomServers: DEFAULT_BLOSSOM_SERVERS,
+    dmRelays: [],
+    searchRelays: ['wss://relay.nostr.band'],
+    language: 'en',
+    encryptedNwc: null,
     notePowEnabled: true,
     notePowBits: DEFAULT_NOTE_POW_BITS,
     reactionPowEnabled: true,
@@ -96,10 +118,9 @@ function loadInitial(): PersistedSettings & { nwcUri: string } {
     const parsed = JSON.parse(raw) as Partial<PersistedSettings & { nwcUri?: string }>
     // Scrub any legacy nwcUri that may have been stored before session-only hardening
     const hadLegacyNwc = Boolean(parsed.nwcUri)
-    let blossomServers =
-      Array.isArray(parsed.blossomServers) && parsed.blossomServers.length > 0
-        ? parsed.blossomServers
-        : DEFAULT_BLOSSOM_SERVERS
+    let blossomServers = Array.isArray(parsed.blossomServers)
+      ? parsed.blossomServers.filter((v): v is string => typeof v === 'string').map(sanitizeBlossomUrl).filter((v): v is string => Boolean(v))
+      : DEFAULT_BLOSSOM_SERVERS
 
     // Migrate old untouched default pair away from private firewisp.blossom.rtard.de
     if (
@@ -118,6 +139,10 @@ function loadInitial(): PersistedSettings & { nwcUri: string } {
           ? parsed.relays
           : DEFAULT_RELAYS,
       blossomServers,
+      dmRelays: Array.isArray(parsed.dmRelays) ? parsed.dmRelays.filter((v): v is string => typeof v === 'string').map(sanitizeRelayUrl).filter((v): v is string => Boolean(v)) : [],
+      searchRelays: Array.isArray(parsed.searchRelays) ? parsed.searchRelays.filter((v): v is string => typeof v === 'string').map(sanitizeRelayUrl).filter((v): v is string => Boolean(v)) : defaults.searchRelays,
+      language: parsed.language === 'it' ? 'it' : 'en',
+      encryptedNwc: typeof parsed.encryptedNwc === 'string' ? parsed.encryptedNwc : null,
       nwcUri: '',
     }
     if (hadLegacyNwc) {
@@ -135,6 +160,10 @@ function persist(state: SettingsState) {
   const snap: PersistedSettings = {
     relays: state.relays,
     blossomServers: state.blossomServers,
+    dmRelays: state.dmRelays,
+    searchRelays: state.searchRelays,
+    language: state.language,
+    encryptedNwc: state.encryptedNwc,
     notePowEnabled: state.notePowEnabled,
     notePowBits: state.notePowBits,
     reactionPowEnabled: state.reactionPowEnabled,
@@ -185,6 +214,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ relays: DEFAULT_RELAYS })
     persist(get())
   },
+  setRelays: (relays) => {
+    const clean = relays.map((r) => ({ url: sanitizeRelayUrl(r.url), read: Boolean(r.read), write: Boolean(r.write) }))
+      .filter((r): r is { url: string; read: boolean; write: boolean } => Boolean(r.url))
+    set({ relays: clean }); persist(get())
+  }, 
 
   addBlossomServer: (rawUrl) => {
     const url = sanitizeBlossomUrl(rawUrl)
@@ -200,6 +234,32 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set((s) => ({ blossomServers: s.blossomServers.filter((u) => u !== url) }))
     persist(get())
   },
+  setBlossomServers: (urls) => {
+    const clean = [...new Set(urls.map(sanitizeBlossomUrl).filter((v): v is string => Boolean(v)))]
+    set({ blossomServers: clean }); persist(get())
+  },
+  addDmRelay: (rawUrl) => {
+    const url = sanitizeRelayUrl(rawUrl)
+    if (!url || get().dmRelays.includes(url)) return false
+    set({ dmRelays: [...get().dmRelays, url] }); persist(get()); return true
+  },
+  removeDmRelay: (url) => { set((s) => ({ dmRelays: s.dmRelays.filter((v) => v !== url) })); persist(get()) },
+  setDmRelays: (urls) => {
+    const clean = [...new Set(urls.map(sanitizeRelayUrl).filter((v): v is string => Boolean(v)))].slice(0, 10)
+    set({ dmRelays: clean }); persist(get())
+  },
+  addSearchRelay: (rawUrl) => {
+    const url = sanitizeRelayUrl(rawUrl)
+    if (!url || get().searchRelays.includes(url)) return false
+    set({ searchRelays: [...get().searchRelays, url] }); persist(get()); return true
+  },
+  removeSearchRelay: (url) => { set((s) => ({ searchRelays: s.searchRelays.filter((v) => v !== url) })); persist(get()) },
+  setSearchRelays: (urls) => {
+    const clean = [...new Set(urls.map(sanitizeRelayUrl).filter((v): v is string => Boolean(v)))]
+    set({ searchRelays: clean }); persist(get())
+  },
+  setLanguage: (language) => { set({ language }); persist(get()) },
+  setEncryptedNwc: (encryptedNwc) => { set({ encryptedNwc }); persist(get()) }, 
 
   setNotePowEnabled: (notePowEnabled) => {
     set({ notePowEnabled })

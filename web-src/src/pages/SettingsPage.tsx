@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Radio,
   UploadCloud,
@@ -17,6 +17,8 @@ import { useAuthStore } from '../lib/store/useAuthStore'
 import { useNostrStore } from '../lib/store/useNostrStore'
 import { useSettingsStore } from '../lib/store/useSettingsStore'
 import { parseNwcUri } from '../lib/nostr/nip57'
+import { RelayPreferencesSection } from '../components/RelayPreferencesSection'
+import { encryptNwcUri, decryptNwcUri } from '../lib/crypto/nwcVault'
 
 export function SettingsPage() {
   const settings = useSettingsStore()
@@ -30,7 +32,27 @@ export function SettingsPage() {
   const [newBlossom, setNewBlossom] = useState('')
   const [newMuteTag, setNewMuteTag] = useState('')
   const [nwcInput, setNwcInput] = useState(settings.nwcUri)
+  useEffect(() => { setNwcInput(settings.nwcUri) }, [settings.nwcUri])
   const [nwcStatus, setNwcStatus] = useState<string | null>(null)
+  const [nwcPassphrase, setNwcPassphrase] = useState('')
+  const saveEncryptedNwc = async () => {
+    if (!parseNwcUri(nwcInput)) { setNwcStatus('Invalid nostr+walletconnect:// URI'); return }
+    try {
+      const encrypted = await encryptNwcUri(nwcInput, nwcPassphrase)
+      settings.setEncryptedNwc(encrypted)
+      settings.setNwcUri(nwcInput)
+      setNwcStatus('NWC connection encrypted and saved. It remains unlocked only for this session.')
+    } catch (e) { setNwcStatus(e instanceof Error ? e.message : String(e)) }
+  }
+  const unlockEncryptedNwc = async () => {
+    if (!settings.encryptedNwc) return
+    try {
+      const uri = await decryptNwcUri(settings.encryptedNwc, nwcPassphrase)
+      if (!parseNwcUri(uri)) throw new Error('The decrypted NWC URI is not valid.')
+      settings.setNwcUri(uri); setNwcInput(uri)
+      setNwcStatus('Encrypted NWC connection unlocked in memory.')
+    } catch (e) { setNwcStatus(e instanceof Error ? e.message : String(e)) }
+  }
 
   const [exportPass, setExportPass] = useState('')
   const [exported, setExported] = useState<string | null>(null)
@@ -192,6 +214,8 @@ export function SettingsPage() {
         </form>
       </section>
 
+      <RelayPreferencesSection />
+
       {/* NIP-13 Anti-Spam PoW */}
       <section className="p-4 space-y-3">
         <h2 className="font-semibold text-sm flex items-center gap-2">
@@ -253,41 +277,36 @@ export function SettingsPage() {
           Lightning Wallet (NWC — NIP-47)
         </h2>
         <p className="text-xs text-[var(--postilla-secondary)]">
-          Connect Alby, Primal, CoinOS, or Zeus for one-click zaps (or use WebLN / QR invoices
-          without connecting a wallet). Stored in memory for this session only — never written to
-          browser storage.
+          Connect an NWC wallet for one-click zaps. The active URI is kept in memory only. You may optionally save an AES-256-GCM encrypted copy in this browser, protected by a separate passphrase; only ciphertext is persisted.
         </p>
-        <div className="flex gap-2">
-          <input
-            type="password"
-            value={nwcInput}
-            onChange={(e) => {
-              setNwcInput(e.target.value)
-              setNwcStatus(null)
-            }}
-            placeholder="nostr+walletconnect://…"
-            className="flex-1 px-3 py-2 rounded-xl bg-[var(--postilla-surface)] border border-[var(--postilla-border-strong)] text-xs font-mono focus:outline-none focus:border-[var(--postilla-accent)]"
-          />
-          <button
-            onClick={() => {
-              if (!nwcInput.trim()) {
-                settings.setNwcUri('')
-                setNwcStatus('Cleared NWC connection')
-                return
-              }
-              if (!parseNwcUri(nwcInput)) {
-                setNwcStatus('Invalid nostr+walletconnect:// URI')
-                return
-              }
-              settings.setNwcUri(nwcInput)
-              setNwcStatus('NWC wallet saved')
-            }}
-            className="px-3.5 py-2 rounded-xl bg-[var(--postilla-accent)] hover:bg-[var(--postilla-accent-hover)] text-xs font-semibold cursor-pointer"
-          >
-            Save
-          </button>
+        <input
+          type="password"
+          value={nwcInput}
+          onChange={(e) => { setNwcInput(e.target.value); setNwcStatus(null) }}
+          placeholder="nostr+walletconnect://…"
+          autoComplete="off"
+          className="w-full px-3 py-2 rounded-xl bg-[var(--postilla-surface)] border border-[var(--postilla-border-strong)] text-xs font-mono focus:outline-none focus:border-[var(--postilla-accent)]"
+        />
+        <input
+          type="password"
+          value={nwcPassphrase}
+          onChange={(e) => setNwcPassphrase(e.target.value)}
+          placeholder="Encryption passphrase (minimum 8 characters)"
+          autoComplete="new-password"
+          className="w-full px-3 py-2 rounded-xl bg-[var(--postilla-surface)] border border-[var(--postilla-border-strong)] text-xs focus:outline-none focus:border-[var(--postilla-accent)]"
+        />
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => {
+            if (!parseNwcUri(nwcInput)) { setNwcStatus('Invalid nostr+walletconnect:// URI'); return }
+            settings.setNwcUri(nwcInput); setNwcStatus('NWC unlocked in memory only.')
+          }} className="rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-xs">Use for this session</button>
+          <button onClick={() => void saveEncryptedNwc()} className="rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-xs font-semibold text-[#1B1916]">Encrypt &amp; save</button>
+          {settings.encryptedNwc && <button onClick={() => void unlockEncryptedNwc()} className="rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-xs">Unlock saved NWC</button>}
+          {settings.encryptedNwc && <button onClick={() => { settings.setEncryptedNwc(null); settings.setNwcUri(''); setNwcInput(''); setNwcStatus('Encrypted NWC copy deleted.') }} className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-300">Delete encrypted copy</button>}
+          <button onClick={() => { settings.setNwcUri(''); setNwcStatus('Active NWC connection cleared from memory.') }} className="rounded-lg border border-[var(--postilla-border)] px-3 py-2 text-xs">Lock / clear session</button>
         </div>
-        {nwcStatus && <p className="text-xs text-[var(--postilla-accent)]">{nwcStatus}</p>}
+        {settings.encryptedNwc && <p className="text-xs text-emerald-400">Encrypted NWC copy is present in this browser. Reloading or signing out locks the active connection.</p>}
+        {nwcStatus && <p role="status" className="text-xs text-[var(--postilla-accent)]">{nwcStatus}</p>}
       </section>
 
       {/* Muted Hashtags & Users */}

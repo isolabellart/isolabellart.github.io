@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import * as nip19 from 'nostr-tools/nip19'
-import { ArrowLeft, Lock, Mail, Send, ShieldCheck, Eye, Plus } from 'lucide-react'
+import { ArrowLeft, Lock, Mail, Send, ShieldCheck, Eye, Plus, Languages, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../lib/store/useAuthStore'
 import { useNostrStore } from '../lib/store/useNostrStore'
 import { useSettingsStore } from '../lib/store/useSettingsStore'
@@ -23,6 +23,7 @@ export function MessagesPage() {
   const sendDm = useNostrStore((s) => s.sendDm)
   const fetchProfiles = useNostrStore((s) => s.fetchProfiles)
   const dmAutoLoadMedia = useSettingsStore((s) => s.dmAutoLoadMedia)
+  const dmRelays = useSettingsStore((s) => s.dmRelays)
 
   const [selectedPeer, setSelectedPeer] = useState<string>(searchParams.get('peer') || '')
   const [newPeerInput, setNewPeerInput] = useState('')
@@ -60,7 +61,7 @@ export function MessagesPage() {
   useEffect(() => {
     if (!signer?.canEncrypt) return
     return subscribeDms()
-  }, [signer, subscribeDms])
+  }, [signer, subscribeDms, dmRelays])
 
   const threads = useMemo(() => {
     const map = new Map<string, { peer: string; lastMsg: string; lastAt: number }>()
@@ -267,6 +268,11 @@ export function MessagesPage() {
                         }`}
                       >
                         {m.content}
+                        <button onClick={() => void translateMessage(m)} disabled={translatingId === m.id} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-current/20 px-2 py-1 text-[11px] opacity-80 hover:opacity-100 disabled:opacity-50">
+                          {translatingId === m.id ? <Loader2 className="h-3 w-3 animate-spin"/> : <Languages className="h-3 w-3"/>}
+                          {translatingId === m.id ? 'Translating…' : showTranslated[m.id] ? 'Show original only' : 'Translate'}
+                        </button>
+                        {showTranslated[m.id] && translated[m.id] && <p className="mt-2 border-t border-current/20 pt-2 text-sm">{translated[m.id]}</p>}
                         {urls.map((imgUrl) => {
                           const show = dmAutoLoadMedia || revealedUrls[imgUrl]
                           return show ? (

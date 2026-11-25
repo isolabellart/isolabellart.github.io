@@ -1,11 +1,13 @@
 import {useEffect,useMemo,useState} from 'react'
 import type {Event} from 'nostr-tools/pure'
-import {Search,Plus,RefreshCw,Bookmark,ExternalLink,Store,MapPin,PackageCheck,CheckCircle2} from 'lucide-react'
+import { Link } from 'react-router-dom'
+import {Search,Plus,RefreshCw,Bookmark,ExternalLink,Store,MapPin,PackageCheck,CheckCircle2,Heart,MessageCircle} from 'lucide-react'
 import {useAuthStore} from '../lib/store/useAuthStore'
 import {useSettingsStore} from '../lib/store/useSettingsStore'
 import {useNostrStore} from '../lib/store/useNostrStore'
 import {nostrPool} from '../lib/nostr/pool'
-import {MARKETPLACE_KINDS,MARKETPLACE_READ_RELAYS,MARKETPLACE_WRITE_RELAYS,MARKETPLACE_WISHLIST_DTAG,latestMarketplaceListings,type MarketplaceListing} from '../lib/nostr/marketplace'
+import {MARKETPLACE_KINDS,MARKETPLACE_READ_RELAYS,MARKETPLACE_WRITE_RELAYS,MARKETPLACE_WISHLIST_DTAG,latestMarketplaceListings,uniqueMarketplaceInterestAuthors,type MarketplaceListing} from '../lib/nostr/marketplace'
+import { uploadToBlossom, buildImetaTag } from '../lib/nostr/blossom'
 
 const tag=(event:Event,name:string)=>event.tags.find(t=>t[0]===name&&t[1])?.[1]
 export function MarketplacePage(){
@@ -14,15 +16,17 @@ export function MarketplacePage(){
  const [listings,setListings]=useState<MarketplaceListing[]>([])
  const [wishlist,setWishlist]=useState<Set<string>>(new Set())
  const [wishlistEvent,setWishlistEvent]=useState<Event|null>(null)
+ const [interestByAddress,setInterestByAddress]=useState<Record<string,{authors:string[];myEvents:Event[]}>>({})
+ const [interestBusy,setInterestBusy]=useState<string|null>(null)
  const [loading,setLoading]=useState(false),[publishing,setPublishing]=useState(false)
  const [error,setError]=useState(''),[notice,setNotice]=useState('')
  const [query,setQuery]=useState(''),[categoryFilter,setCategoryFilter]=useState('all'),[locationFilter,setLocationFilter]=useState('all')
- const [scope,setScope]=useState<'all'|'following'|'mine'>('all'),[hideSold,setHideSold]=useState(true)
+ const [scope,setScope]=useState<'all'|'following'|'mine'|'wishlist'>('all'),[hideSold,setHideSold]=useState(true)
  const [showComposer,setShowComposer]=useState(false)
  const [title,setTitle]=useState(''),[summary,setSummary]=useState(''),[description,setDescription]=useState('')
  const [price,setPrice]=useState(''),[currency,setCurrency]=useState('EUR'),[stock,setStock]=useState('1')
  const [format,setFormat]=useState<'physical'|'digital'>('physical'),[visibility,setVisibility]=useState<'on-sale'|'pre-order'>('on-sale')
- const [location,setLocation]=useState(''),[categories,setCategories]=useState(''),[images,setImages]=useState('')
+ const [location,setLocation]=useState(''),[categories,setCategories]=useState(''),[images,setImages]=useState(''),[imageFiles,setImageFiles]=useState<File[]>([])
 
  async function loadWishlist(){
   if(!pubkey){setWishlist(new Set());setWishlistEvent(null);return}
@@ -33,13 +37,46 @@ export function MarketplacePage(){
    setWishlistEvent(owned||null);setWishlist(new Set(owned?.tags.filter(t=>t[0]==='a'&&t[1]).map(t=>t[1])||[]))
   }catch{}
  }
+ async function loadInterests(items:MarketplaceListing[]){
+  const addresses=items.map(item=>item.address)
+  if(!addresses.length){setInterestByAddress({});return}
+  const relays=[...new Set([...settings.getReadRelays(),...MARKETPLACE_READ_RELAYS])]
+  const reactions=await nostrPool.query(relays,{kinds:[7],'#a':addresses,limit:3000},10000)
+  const ids=reactions.map(event=>event.id)
+  const deletions=ids.length?await nostrPool.query(relays,{kinds:[5],'#e':ids,limit:3000},7000):[]
+  const reactionById=new Map(reactions.map(event=>[event.id,event]))
+  const deleted=new Set<string>()
+  for(const deletion of deletions)for(const t of deletion.tags){
+   if(t[0]!=='e'||!t[1])continue
+   const original=reactionById.get(t[1])
+   if(original&&original.pubkey===deletion.pubkey)deleted.add(original.id)
+  }
+  const next:Record<string,{authors:string[];myEvents:Event[]}>= {}
+  for(const reaction of reactions){
+   if(deleted.has(reaction.id))continue
+   const address=tag(reaction,'a')
+   if(!address||!addresses.includes(address))continue
+   const current=next[address]||{authors:[],myEvents:[]}
+   if(!current.authors.includes(reaction.pubkey))current.authors.push(reaction.pubkey)
+   if(pubkey&&reaction.pubkey===pubkey)current.myEvents.push(reaction)
+   next[address]=current
+  }
+  for(const listing of items){
+   next[listing.address]={
+    authors:uniqueMarketplaceInterestAuthors(reactions,listing.address,deleted),
+    myEvents:reactions.filter(event=>!deleted.has(event.id)&&event.pubkey===pubkey&&event.tags.some(t=>t[0]==='a'&&t[1]===listing.address)),
+   }
+  }
+  setInterestByAddress(next)
+ }
  async function refresh(){
   setLoading(true);setError('')
   try{
    const relays=[...new Set([...settings.getReadRelays(),...MARKETPLACE_READ_RELAYS])]
    if(!relays.length)throw new Error('No Marketplace read relay is configured.')
-   const events=await nostrPool.query(relays,{kinds:[...MARKETPLACE_KINDS],limit:1000},12000)
-   setListings(latestMarketplaceListings(events,pubkey || undefined));await loadWishlist()
+   const events=await nostrPool.query(relays,{kinds:[...MARKETPLACE_KINDS,5],limit:1500},12000)
+   const latest=latestMarketplaceListings(events,pubkey || undefined)
+   setListings(latest);await Promise.all([loadWishlist(),loadInterests(latest)])
   }catch(e){setError(e instanceof Error?e.message:String(e))}
   finally{setLoading(false)}
  }
@@ -52,10 +89,11 @@ export function MarketplacePage(){
   if(categoryFilter!=='all'&&!l.categories.some(c=>c.toLowerCase()===categoryFilter.toLowerCase()))return false
   if(locationFilter!=='all'&&l.location.toLowerCase()!==locationFilter.toLowerCase())return false
   if(scope==='mine'&&l.event.pubkey!==pubkey)return false
+  if(scope==='wishlist'&&!wishlist.has(l.address))return false
   if(scope==='following'&&l.event.pubkey!==pubkey&&!follows.includes(l.event.pubkey))return false
   if(q&&!([l.title,l.summary,l.description,l.location,l.categories.join(' '),l.event.pubkey].join(' ').toLowerCase().includes(q)))return false
   return true
- }),[listings,query,categoryFilter,locationFilter,scope,hideSold,pubkey,follows])
+ }),[listings,query,categoryFilter,locationFilter,scope,hideSold,pubkey,follows,wishlist])
 
  async function publishToMarketplace(event:Event){
   const relays=[...new Set([...settings.getWriteRelays(),...MARKETPLACE_WRITE_RELAYS])]
@@ -76,9 +114,10 @@ export function MarketplacePage(){
    if(price.trim())tags.push(['price',price.trim(),currency])
    categories.split(/[,#\n]/).map(s=>s.trim().replace(/^#/,'').toLowerCase()).filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).forEach(c=>tags.push(['t',c]))
    images.split(/\n/).map(s=>s.trim()).filter(s=>/^https:\/\//i.test(s)).forEach(url=>tags.push(['image',url]))
+   for(const file of imageFiles){const upload=await uploadToBlossom(file,file.type||'image/jpeg',signer,settings.blossomServers);tags.push(['image',upload.url]);tags.push(buildImetaTag(upload,file.name))}
    const event=await signer.signEvent({kind:30402,created_at:Math.floor(Date.now()/1000),tags,content:description.trim()})
    await publishToMarketplace(event);setNotice('The listing was confirmed by at least one Marketplace relay.')
-   setShowComposer(false);setTitle('');setSummary('');setDescription('');setPrice('');setStock('1');setLocation('');setCategories('');setImages('')
+   setShowComposer(false);setTitle('');setSummary('');setDescription('');setPrice('');setStock('1');setLocation('');setCategories('');setImages('');setImageFiles([])
    await refresh()
   }catch(e){setError(e instanceof Error?e.message:String(e))}
   finally{setPublishing(false)}
@@ -96,6 +135,37 @@ export function MarketplacePage(){
    if(!outcomes.some(result=>result.ok))throw new Error('No personal write relay confirmed the Wishlist update.')
    setWishlistEvent(event);setNotice(next.has(listing.address)?'Listing saved to your NIP-51 Wishlist.':'Listing removed from your NIP-51 Wishlist.')
   }catch(e){setWishlist(new Set(wishlist));setError(e instanceof Error?e.message:String(e));await loadWishlist()}
+ }
+ async function toggleInterest(listing:MarketplaceListing){
+  if(!signer?.canSign||!pubkey){useAuthStore.getState().openAuthModal();return}
+  if(interestBusy===listing.address)return
+  setInterestBusy(listing.address);setError('');setNotice('')
+  try{
+   const current=interestByAddress[listing.address]||{authors:[],myEvents:[]}
+   if(current.myEvents.length){
+    const deletion=await signer.signEvent({kind:5,created_at:Math.floor(Date.now()/1000),tags:current.myEvents.map(event=>['e',event.id]).concat([['k','7']]),content:'Marketplace interest removed'})
+    await publishToMarketplace(deletion)
+    setNotice('Your interest has been removed.')
+   }else{
+    const reaction=await signer.signEvent({kind:7,created_at:Math.floor(Date.now()/1000),tags:[['a',listing.address],['p',listing.event.pubkey],['k',String(listing.kind)]],content:'+'})
+    await publishToMarketplace(reaction)
+    setNotice('Your interest was confirmed by a Marketplace relay.')
+   }
+   await loadInterests(listings)
+  }catch(e){setError(e instanceof Error?e.message:String(e));await loadInterests(listings)}
+  finally{setInterestBusy(null)}
+ }
+ async function withdrawListing(listing:MarketplaceListing){
+  if(!signer?.canSign||listing.event.pubkey!==pubkey||listing.kind!==30402)return
+  if(!window.confirm('Withdraw this listing? Its NIP-09 deletion will mark it unavailable on relays that apply addressable deletions.'))return
+  setPublishing(true);setError('');setNotice('')
+  try{
+   const deletion=await signer.signEvent({kind:5,created_at:Math.floor(Date.now()/1000),tags:[['a',listing.address],['k','30402']],content:'Marketplace listing withdrawn by seller'})
+   await publishToMarketplace(deletion)
+   setNotice('Withdrawal confirmed by at least one Marketplace relay.')
+   await refresh()
+  }catch(e){setError(e instanceof Error?e.message:String(e))}
+  finally{setPublishing(false)}
  }
  async function markSold(listing:MarketplaceListing){
   if(!signer?.canSign||listing.event.pubkey!==pubkey||listing.kind!==30402)return
@@ -116,7 +186,7 @@ export function MarketplacePage(){
   <div className="space-y-3 border-b border-[var(--postilla-border)] p-3">
    <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--postilla-secondary)]"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search listings, sellers, descriptions" className="w-full rounded-xl border border-[var(--postilla-border)] bg-[var(--postilla-surface)] py-2 pl-9 pr-3 text-sm outline-none focus:border-[var(--postilla-accent)]"/></div>
    <div className="flex flex-wrap gap-2">
-    <select value={scope} onChange={e=>setScope(e.target.value as typeof scope)} className="rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-2 py-1.5 text-xs"><option value="all">All listings</option><option value="following">Following</option><option value="mine">My listings</option></select>
+    <select value={scope} onChange={e=>setScope(e.target.value as typeof scope)} className="rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-2 py-1.5 text-xs"><option value="all">All listings</option><option value="following">Following</option><option value="mine">My listings</option><option value="wishlist">My Wishlist</option></select>
     <select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="max-w-[45%] rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-2 py-1.5 text-xs"><option value="all">All categories</option>{categoriesAvailable.map(c=><option key={c}>{c}</option>)}</select>
     <select value={locationFilter} onChange={e=>setLocationFilter(e.target.value)} className="max-w-[45%] rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-surface)] px-2 py-1.5 text-xs"><option value="all">All locations</option>{locationsAvailable.map(c=><option key={c}>{c}</option>)}</select>
     <label className="ml-auto flex items-center gap-2 text-xs text-[var(--postilla-secondary)]"><input type="checkbox" checked={hideSold} onChange={e=>setHideSold(e.target.checked)}/>Hide sold out</label>
@@ -135,8 +205,8 @@ export function MarketplacePage(){
    <select value={visibility} onChange={e=>setVisibility(e.target.value as typeof visibility)} className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-2 text-sm"><option value="on-sale">On sale</option><option value="pre-order">Pre-order</option></select>
    <input value={location} onChange={e=>setLocation(e.target.value)} placeholder="Location (optional)" className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-2 text-sm"/>
    <input value={categories} onChange={e=>setCategories(e.target.value)} placeholder="Categories (comma separated)" className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-2 text-sm"/>
-   <textarea value={images} onChange={e=>setImages(e.target.value)} placeholder="Image HTTPS URLs (one per line)" rows={2} className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-2 text-sm"/>
-   <p className="text-xs text-[var(--postilla-secondary)]">The listing uses Android-aligned NIP-99 tags. Image URLs must already be uploaded; the full Blossom editor/upload flow is not yet integrated.</p>
+   <textarea value={images} onChange={e=>setImages(e.target.value)} placeholder="Existing HTTPS image URLs (one per line)" rows={2} className="w-full rounded-lg border border-[var(--postilla-border)] bg-[var(--postilla-bg)] p-2 text-sm"/><input type="file" accept="image/*" multiple onChange={e=>setImageFiles(Array.from(e.target.files||[]))} className="w-full text-xs"/><p className="text-xs text-[var(--postilla-secondary)]">Selected images are uploaded to your configured Blossom servers (maximum 10 MB each).</p>
+   <p className="text-xs text-[var(--postilla-secondary)]">The listing uses addressable NIP-99 kind 30402 events. Images can be uploaded to configured Blossom servers or referenced by HTTPS URL.</p>
    <div className="flex justify-end gap-2"><button onClick={()=>setShowComposer(false)} className="rounded-lg px-3 py-2 text-xs">Cancel</button><button onClick={()=>void publishListing()} disabled={publishing} className="rounded-lg bg-[var(--postilla-accent)] px-3 py-2 text-xs font-semibold text-[#1B1916] disabled:opacity-50">{publishing?'Publishing…':'Publish'}</button></div>
   </section>}
   {loading&&listings.length===0&&<p className="p-8 text-center text-sm text-[var(--postilla-secondary)]">Loading Marketplace listings…</p>}
@@ -149,7 +219,7 @@ export function MarketplacePage(){
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><strong>{listing.price?listing.price+' '+listing.currency:'Price on request'}{listing.frequency?'/'+listing.frequency:''}</strong><span className="text-[var(--postilla-secondary)]">{listing.categories.join(' · ')||listing.format}</span></div>
     {listing.location&&<p className="flex items-center gap-1 text-xs text-[var(--postilla-secondary)]"><MapPin className="h-3 w-3"/>{listing.location}</p>}
     <div className="flex flex-wrap items-center gap-2 text-[11px]"><span className="rounded-full border border-[var(--postilla-border)] px-2 py-1">{listing.isSold?'Sold out':listing.status==='pre-order'?'Pre-order':listing.stock===null?'Availability unknown':listing.stock+' available'}</span><span className="text-[var(--postilla-secondary)]">{listing.format} · {listing.kind===30018?'NIP-15 legacy':'NIP-99'}</span></div>
-    <div className="flex justify-between border-t border-[var(--postilla-border)] pt-2 text-[11px] text-[var(--postilla-secondary)]"><span>{listing.event.pubkey.slice(0,10)}…</span><div className="flex gap-3"><a href={`https://njump.me/${listing.event.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3"/></a>{listing.event.pubkey===pubkey&&listing.kind===30402&&!listing.isSold&&<button onClick={()=>void markSold(listing)} className="inline-flex items-center gap-1 text-[var(--postilla-accent)]"><PackageCheck className="h-3 w-3"/>Mark sold</button>}{listing.event.pubkey===pubkey&&listing.isSold&&<span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Updated</span>}</div></div>
+    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--postilla-border)] pt-2 text-[11px] text-[var(--postilla-secondary)]"><span>{listing.event.pubkey.slice(0,10)}…</span><div className="flex flex-wrap items-center gap-3"><button disabled={interestBusy===listing.address} onClick={()=>void toggleInterest(listing)} className="inline-flex items-center gap-1 disabled:opacity-50"><Heart className={`h-3 w-3 ${(interestByAddress[listing.address]?.myEvents.length||0)>0?'fill-current text-red-400':''}`}/>{interestByAddress[listing.address]?.authors.length||0} interested</button>{listing.event.pubkey!==pubkey&&<Link to={`/messages?peer=${listing.event.pubkey}`} className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3"/>Contact seller</Link>}<a href={`https://njump.me/${listing.event.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1">Open <ExternalLink className="h-3 w-3"/></a>{listing.event.pubkey===pubkey&&listing.kind===30402&&!listing.isSold&&<><button onClick={()=>void markSold(listing)} className="inline-flex items-center gap-1 text-[var(--postilla-accent)]"><PackageCheck className="h-3 w-3"/>Mark sold</button><button onClick={()=>void withdrawListing(listing)} className="text-red-300">Withdraw</button></>}{listing.event.pubkey===pubkey&&listing.isSold&&<span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3"/>Updated</span>}</div></div>
    </div>
   </article>)}</div>
  </div>

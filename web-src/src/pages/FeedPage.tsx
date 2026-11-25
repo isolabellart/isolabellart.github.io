@@ -40,6 +40,7 @@ function FeedSkeleton() {
 
 export function FeedPage() {
   const pubkey = useAuthStore((s) => s.pubkey)
+  const language = useSettingsStore((s) => s.language)
   const tab = useNostrStore((s) => s.activeFeedTab)
   const setTab = useNostrStore((s) => s.setActiveFeedTab)
   const showRepliesInFollows = useNostrStore((s) => s.showRepliesInFollows)
@@ -69,6 +70,7 @@ export function FeedPage() {
   const setSpamFilterEnabled = useSettingsStore((s) => s.setSpamFilterEnabled)
 
   const [refreshTick, setRefreshTick] = useState(0)
+  const [trendingFilter, setTrendingFilter] = useState<'all' | 'posts' | 'images' | 'videos' | 'articles'>('all')
   const [noMoreOlder, setNoMoreOlder] = useState(false)
 
   useEffect(() => {
@@ -92,7 +94,7 @@ export function FeedPage() {
     if (added === 0) setNoMoreOlder(true)
   }
 
-  const ids =
+  const sourceIds =
     tab === 'firewisp'
       ? firewispFeedIds
       : tab === 'following'
@@ -102,6 +104,13 @@ export function FeedPage() {
           : tab === 'trending'
             ? trendingFeedIds
             : globalFeedIds
+  const ids = tab !== 'trending' || trendingFilter === 'all' ? sourceIds : sourceIds.filter((id) => {
+    const kind = events[id]?.kind
+    if (trendingFilter === 'posts') return kind === 1
+    if (trendingFilter === 'images') return kind === 20
+    if (trendingFilter === 'videos') return kind === 21 || kind === 22 || kind === 34235 || kind === 34236
+    return kind === 30023
+  })
 
   const { items, spamBlockedCount } = useMemo(() => {
     const out: Array<{ event: Event; repostedBy?: string }> = []
@@ -196,11 +205,11 @@ export function FeedPage() {
       <div className="sticky top-[52px] md:top-0 z-20 bg-[var(--postilla-bg)]/90 backdrop-blur-md border-b border-[var(--postilla-border)] flex overflow-x-auto text-xs sm:text-sm font-medium">
         {(
           [
-            ['global', 'Explore', Globe],
-            ['trending', 'Trending', TrendingUp],
+            ['global', language === 'it' ? 'Per te' : 'For You', Globe],
+            ['trending', language === 'it' ? 'Tendenze' : 'Trending', TrendingUp],
             ['firewisp', 'Postilla', Flame],
-            ['following', 'Follows', Users],
-            ['extended', 'Extended', Network],
+            ['following', language === 'it' ? 'Seguiti' : 'Follows', Users],
+            ['extended', language === 'it' ? 'Esteso' : 'Extended', Network],
           ] as [FeedTab, string, typeof Flame][]
         ).map(([id, label, Icon]) => (
           <button
@@ -217,6 +226,20 @@ export function FeedPage() {
           </button>
         ))}
       </div>
+
+      {tab === 'trending' && (
+        <div className="flex gap-2 overflow-x-auto border-b border-[var(--postilla-border)] px-3 py-2">
+          {([
+            ['all', language === 'it' ? 'Tutti' : 'All'],
+            ['posts', language === 'it' ? 'Post' : 'Posts'],
+            ['images', language === 'it' ? 'Immagini' : 'Images'],
+            ['videos', language === 'it' ? 'Video' : 'Videos'],
+            ['articles', language === 'it' ? 'Articoli' : 'Articles'],
+          ] as const).map(([id, label]) => (
+            <button key={id} onClick={() => setTrendingFilter(id)} className={`shrink-0 rounded-full border px-3 py-1 text-xs ${trendingFilter === id ? 'border-[var(--postilla-accent)] bg-[var(--postilla-accent)]/15 text-[var(--postilla-accent)]' : 'border-[var(--postilla-border)] text-[var(--postilla-secondary)]'}`}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {/* Status + Controls Strip */}
       <div className="px-4 py-2 border-b border-[var(--postilla-border)] bg-[var(--postilla-surface)]/80 flex items-center justify-between gap-2 text-xs">

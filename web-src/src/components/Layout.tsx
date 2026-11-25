@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import {
   Flame,
+  FileText,
   Search,
   Bell,
   Mail,
@@ -29,9 +30,11 @@ import { useNostrStore } from '../lib/store/useNostrStore'
 import { Avatar } from './Avatar'
 import { AuthModal } from './AuthModal'
 import { ThemeToggle } from './ThemeToggle'
+import { useSettingsStore } from '../lib/store/useSettingsStore'
 
 export function Layout({ children }: { children: ReactNode }) {
   const pubkey = useAuthStore((s) => s.pubkey)
+  const language = useSettingsStore((s) => s.language)
   const method = useAuthStore((s) => s.method)
   const openAuthModal = useAuthStore((s) => s.openAuthModal)
   const logout = useAuthStore((s) => s.logout)
@@ -45,13 +48,14 @@ export function Layout({ children }: { children: ReactNode }) {
   const totalCount = Math.max(Object.keys(relayStatuses).length, 1)
 
   const navItems = [
-    { to: '/', label: 'Feed', icon: Flame, end: true },
-    { to: '/search', label: 'Search', icon: Search },
-    { to: '/notifications', label: 'Alerts', icon: Bell },
-    { to: '/messages', label: 'Messages', icon: Mail },
-    { to: '/bookmarks', label: 'Bookmarks', icon: Bookmark },
+    { to: '/', label: language === 'it' ? 'Flusso' : 'Feed', icon: Flame, end: true },
+    { to: '/search', label: language === 'it' ? 'Cerca' : 'Search', icon: Search },
+    { to: '/notifications', label: language === 'it' ? 'Avvisi' : 'Alerts', icon: Bell },
+    { to: '/messages', label: language === 'it' ? 'Messaggi' : 'Messages', icon: Mail },
+    { to: '/bookmarks', label: language === 'it' ? 'Segnalibri' : 'Bookmarks', icon: Bookmark },
     ...(pubkey ? [{ to: `/p/${pubkey}`, label: 'Profile', icon: User }] : []),
-    { to: '/settings', label: 'Settings', icon: Settings },
+    { to: '/settings', label: language === 'it' ? 'Impostazioni' : 'Settings', icon: Settings },
+    { to: '/articles', label: language === 'it' ? 'Articoli' : 'Articles', icon: FileText },
     { to: '/marketplace', label: 'Marketplace', icon: ShoppingBag },
     { to: '/videos', label: 'Videos', icon: Video },
     { to: '/wallet', label: 'Spark Wallet', icon: Wallet },

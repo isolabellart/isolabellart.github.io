@@ -130,10 +130,20 @@ export function parseMarketplaceListing(event: Event, viewerPubkey?: string): Ma
 }
 
 export function latestMarketplaceListings(events: Event[], viewerPubkey?: string): MarketplaceListing[] {
+  const withdrawn = new Set<string>()
+  for (const deletion of events) {
+    if (deletion.kind !== 5) continue
+    for (const entry of deletion.tags.filter((t) => t[0] === 'a' && t[1])) {
+      const parts = entry[1].split(':')
+      if (parts.length >= 3 && parts[0] === '30402' && parts[1] === deletion.pubkey) {
+        withdrawn.add(`30402:${parts[1]}:${parts.slice(2).join(':')}`)
+      }
+    }
+  }
   const byAddress = new Map<string, Event>()
   for (const event of events) {
     const parsed = parseMarketplaceListing(event,viewerPubkey)
-    if (!parsed) continue
+    if (!parsed || withdrawn.has(parsed.address)) continue
     const existing=byAddress.get(parsed.address)
     if(!existing || event.created_at>existing.created_at || (event.created_at===existing.created_at && event.id>existing.id)) byAddress.set(parsed.address,event)
   }
@@ -141,4 +151,18 @@ export function latestMarketplaceListings(events: Event[], viewerPubkey?: string
     .map(event=>parseMarketplaceListing(event,viewerPubkey))
     .filter((item):item is MarketplaceListing=>Boolean(item))
     .sort((a,b)=>(b.event.created_at-a.event.created_at))
+}
+
+export function uniqueMarketplaceInterestAuthors(
+  events: Event[],
+  address: string,
+  deletedEventIds: Set<string> = new Set(),
+): string[] {
+  const authors = new Set<string>()
+  for (const event of events) {
+    if (event.kind !== 7 || deletedEventIds.has(event.id)) continue
+    if (!event.tags.some((tag) => tag[0] === 'a' && tag[1] === address)) continue
+    authors.add(event.pubkey.toLowerCase())
+  }
+  return [...authors]
 }

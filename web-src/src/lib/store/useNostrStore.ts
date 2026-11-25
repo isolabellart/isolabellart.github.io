@@ -521,28 +521,55 @@ export const useNostrStore = create<NostrState>((set, get) => ({
   },
 
   loadUserGraph: async (pubkey) => {
-    const relays = useSettingsStore.getState().getReadRelays()
-    const [contactEvents, bookmarkEvents, relayListEvents] = await Promise.all([
-      nostrPool.query(relays, { kinds: [3], authors: [pubkey], limit: 3 }, 4000),
-      nostrPool.query(relays, { kinds: [10003], authors: [pubkey], limit: 2 }, 3500),
-      nostrPool.query(relays, { kinds: [10002], authors: [pubkey], limit: 2 }, 3500),
+    const settings = useSettingsStore.getState()
+    const discoveryRelays = [...new Set([
+      ...settings.getReadRelays(),
+      ...settings.searchRelays,
+      ...CURATED_EXPLORE_RELAYS,
+    ])]
+    const [contactEvents, bookmarkEvents, relayListEvents, dmRelayEvents, blossomEvents, searchEvents] = await Promise.all([
+      nostrPool.query(discoveryRelays, { kinds: [3], authors: [pubkey], limit: 3 }, 4000),
+      nostrPool.query(discoveryRelays, { kinds: [10003], authors: [pubkey], limit: 2 }, 3500),
+      nostrPool.query(discoveryRelays, { kinds: [10002], authors: [pubkey], limit: 2 }, 3500),
+      nostrPool.query(discoveryRelays, { kinds: [10050], authors: [pubkey], limit: 2 }, 3500),
+      nostrPool.query(discoveryRelays, { kinds: [10063], authors: [pubkey], limit: 2 }, 3500),
+      nostrPool.query(discoveryRelays, { kinds: [10007], authors: [pubkey], limit: 2 }, 3500),
     ])
 
     if (relayListEvents.length > 0) {
+      const latestRelayList = [...relayListEvents].sort((a, b) => b.created_at - a.created_at)[0]
       const nip65Read: string[] = []
       const nip65Write: string[] = []
-      for (const t of relayListEvents[0].tags) {
+      const entries = new Map<string, { url: string; read: boolean; write: boolean }>()
+      for (const t of latestRelayList.tags) {
         if (t[0] !== 'r' || !t[1]) continue
         const clean = sanitizeRelayUrl(t[1])
         if (!clean) continue
         const marker = t[2]
-        if (!marker || marker === 'read') nip65Read.push(clean)
-        if (!marker || marker === 'write') nip65Write.push(clean)
+        if (marker && marker !== 'read' && marker !== 'write') continue
+        const read = !marker || marker === 'read'
+        const write = !marker || marker === 'write'
+        const previous = entries.get(clean)
+        entries.set(clean, { url: clean, read: Boolean(previous?.read || read), write: Boolean(previous?.write || write) })
+        if (read) nip65Read.push(clean)
+        if (write) nip65Write.push(clean)
       }
+      const cleanEntries = [...entries.values()]
+      settings.setRelays(cleanEntries)
       set({
-        userReadRelays: [...new Set(nip65Read)].slice(0, 10),
-        userWriteRelays: [...new Set(nip65Write)].slice(0, 10),
+        userReadRelays: [...new Set(nip65Read)],
+        userWriteRelays: [...new Set(nip65Write)],
       })
+    }
+
+    if (dmRelayEvents.length > 0) {
+      settings.setDmRelays([...dmRelayEvents].sort((a, b) => b.created_at - a.created_at)[0].tags.filter((t) => t[0] === 'relay' && t[1]).map((t) => t[1]))
+    }
+    if (blossomEvents.length > 0) {
+      settings.setBlossomServers([...blossomEvents].sort((a, b) => b.created_at - a.created_at)[0].tags.filter((t) => t[0] === 'server' && t[1]).map((t) => t[1]))
+    }
+    if (searchEvents.length > 0) {
+      settings.setSearchRelays([...searchEvents].sort((a, b) => b.created_at - a.created_at)[0].tags.filter((t) => t[0] === 'relay' && t[1]).map((t) => t[1]))
     }
 
     if (contactEvents.length > 0) {
@@ -649,7 +676,7 @@ export const useNostrStore = create<NostrState>((set, get) => ({
       tab === 'firewisp'
         ? [FIREWISP_RELAY]
         : tab === 'trending'
-          ? [TRENDING_RELAY]
+          ? [TRENDING_RELAY, ...CURATED_EXPLORE_RELAYS]
           : tab === 'global'
             ? CURATED_EXPLORE_RELAYS
             : mergedFollowingRelays
@@ -666,7 +693,7 @@ export const useNostrStore = create<NostrState>((set, get) => ({
           queries.push(
             nostrPool.query(
               targetRelays,
-              { kinds: [1, 6, 20, 21, 22], authors: allAuthors.slice(i, i + 250), until, limit: 40 },
+              { kinds: [1, 6, 20, 21, 22, 30023, 34235, 34236], authors: allAuthors.slice(i, i + 250), until, limit: 40 },
               4500,
             ),
           )
@@ -677,14 +704,14 @@ export const useNostrStore = create<NostrState>((set, get) => ({
         const allowed = new Set(s.extendedAuthors.map((p) => p.toLowerCase()))
         const res = await nostrPool.query(
           targetRelays,
-          { kinds: [1, 20, 21, 22], authors: s.extendedAuthors.slice(0, 200), until, limit: 50 },
+          { kinds: [1, 20, 21, 22, 30023, 34235, 34236], authors: s.extendedAuthors.slice(0, 200), until, limit: 50 },
           4500,
         )
         fetched = res.filter((ev) => allowed.has(ev.pubkey.toLowerCase()))
       } else {
         fetched = await nostrPool.query(
           targetRelays,
-          { kinds: tab === 'trending' ? [1] : [1, 6, 20, 21, 22], until, limit: 50 },
+          { kinds: tab === 'trending' ? [1, 20, 21, 22, 30023, 34235, 34236] : [1, 6, 20, 21, 22, 30023, 34235, 34236], until, limit: 50 },
           4500,
         )
       }
@@ -740,7 +767,7 @@ export const useNostrStore = create<NostrState>((set, get) => ({
       tab === 'firewisp'
         ? [FIREWISP_RELAY]
         : tab === 'trending'
-          ? [TRENDING_RELAY]
+          ? [TRENDING_RELAY, ...CURATED_EXPLORE_RELAYS]
           : tab === 'global'
             ? CURATED_EXPLORE_RELAYS
             : mergedFollowingRelays
@@ -802,7 +829,7 @@ export const useNostrStore = create<NostrState>((set, get) => ({
         }, 400)
       }
 
-      if (ev.kind === 1 || ev.kind === 20 || ev.kind === 21 || ev.kind === 22 || ev.kind === 6) {
+      if (ev.kind === 1 || ev.kind === 20 || ev.kind === 21 || ev.kind === 22 || ev.kind === 30023 || ev.kind === 34235 || ev.kind === 34236 || ev.kind === 6) {
         set((s) => {
           const eventsMap = { ...s.events, [ev.id]: ev }
           const existingList =
@@ -877,7 +904,7 @@ export const useNostrStore = create<NostrState>((set, get) => ({
         const chunks: Array<{ kinds: number[]; authors: string[]; since: number; limit: number }> = []
         for (let i = 0; i < Math.min(allAuthors.length, 2000); i += 250) {
           chunks.push({
-            kinds: [1, 6, 20, 21, 22],
+            kinds: [1, 6, 20, 21, 22, 30023, 34235, 34236],
             authors: allAuthors.slice(i, i + 250),
             since,
             limit: 100,
@@ -886,13 +913,13 @@ export const useNostrStore = create<NostrState>((set, get) => ({
         return chunks
       }
       if (tab === 'extended') {
-        return [{ kinds: [1, 20, 21, 22], authors: extendedAuthors.slice(0, 200), limit: 80 }]
+        return [{ kinds: [1, 20, 21, 22, 30023, 34235, 34236], authors: extendedAuthors.slice(0, 200), limit: 80 }]
       }
       if (tab === 'trending') {
         // trending.relays.land serves curated kind-1 trending notes directly
-        return [{ kinds: [1], limit: 80 }]
+        return [{ kinds: [1, 20, 21, 22, 30023, 34235, 34236], limit: 80 }]
       }
-      return [{ kinds: [1, 6, 20, 21, 22], limit: 60 }]
+      return [{ kinds: [1, 6, 20, 21, 22, 30023, 34235, 34236], limit: 60 }]
     })()
 
     if (filters.length === 0) {
@@ -981,9 +1008,11 @@ export const useNostrStore = create<NostrState>((set, get) => ({
   subscribeDms: () => {
     const signer = useAuthStore.getState().signer
     if (!signer || !signer.canEncrypt) return () => {}
-    const relays = [
-      ...new Set([...useSettingsStore.getState().getReadRelays(), ...get().userReadRelays]),
-    ].slice(0, 10)
+    const relays = useSettingsStore.getState().dmRelays
+    if (relays.length === 0) {
+      set({ toastMessage: 'No NIP-17 inbox relays found. Publish your kind 10050 list in Settings to receive private messages.' })
+      return () => {}
+    }
     const sub = nostrPool.subscribe(
       relays,
       { kinds: [1059], '#p': [signer.pubkey], limit: 80 },
@@ -1231,18 +1260,34 @@ export const useNostrStore = create<NostrState>((set, get) => ({
     if (!signer?.canEncrypt) {
       throw new Error('Your sign-in method does not support NIP-44 encrypted DMs')
     }
-    const { recipientWrap, selfWrap, dm } = await createGiftWrappedDm(
-      signer,
-      recipientPubkey,
-      plaintext.trim(),
-    )
-    const writeRelays = [...new Set([...useSettingsStore.getState().getWriteRelays(), ...get().userWriteRelays])]
-    await Promise.all([
-      nostrPool.publish(writeRelays, recipientWrap),
-      nostrPool.publish(writeRelays, selfWrap),
-    ])
+    const cleanRecipient = recipientPubkey.toLowerCase()
+    if (!/^[0-9a-f]{64}$/.test(cleanRecipient)) throw new Error('Invalid recipient public key')
+    const settings = useSettingsStore.getState()
+    const discoveryRelays = [...new Set([
+      ...settings.getReadRelays(), ...settings.searchRelays, ...get().userReadRelays, ...CURATED_EXPLORE_RELAYS,
+    ])]
+    const recipientLists = await nostrPool.query(discoveryRelays, { kinds: [10050], authors: [cleanRecipient], limit: 5 }, 7000)
+    const latestList = recipientLists.sort((a, b) => b.created_at - a.created_at)[0]
+    const recipientRelays = [...new Set((latestList?.tags || [])
+      .filter((t) => t[0] === 'relay' && t[1])
+      .map((t) => sanitizeRelayUrl(t[1]))
+      .filter((v): v is string => Boolean(v)))].slice(0, 10)
+    if (recipientRelays.length === 0) {
+      throw new Error('The recipient has not published a NIP-17 inbox relay list (kind 10050). For privacy, Postilla will not send this message to general relays.')
+    }
+    const { recipientWrap, selfWrap, dm } = await createGiftWrappedDm(signer, cleanRecipient, plaintext.trim())
+    const recipientResults = await nostrPool.publish(recipientRelays, recipientWrap)
+    const recipientOk = recipientResults.filter((result) => result.ok).length
+    if (recipientOk === 0) {
+      throw new Error('No relay in the recipient’s NIP-17 inbox list confirmed delivery. The message was not added to the conversation.')
+    }
+    const ownInboxRelays = settings.dmRelays
+    if (ownInboxRelays.length > 0) {
+      await nostrPool.publish(ownInboxRelays, selfWrap)
+    }
     set((s) => ({
       dms: [...s.dms, dm].sort((a, b) => a.createdAt - b.createdAt),
+      toastMessage: `Private message accepted by ${recipientOk}/${recipientRelays.length} recipient inbox relays`,
     }))
     return dm
   },

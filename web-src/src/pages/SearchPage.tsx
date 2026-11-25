@@ -15,6 +15,7 @@ export function SearchPage() {
   const fetchProfiles = useNostrStore((s) => s.fetchProfiles)
   const isEventMuted = useNostrStore((s) => s.isEventMuted)
   const relays = useSettingsStore((s) => s.relays)
+  const searchRelays = useSettingsStore((s) => s.searchRelays)
   const readRelays = useMemo(
     () => relays.filter((r) => r.read).map((r) => r.url),
     [relays],
@@ -55,18 +56,41 @@ export function SearchPage() {
       return
     }
 
+    if (lower.startsWith('naddr1')) {
+      setSearching(true)
+      try {
+        const decoded = nip19.decode(lower)
+        if (decoded.type === 'naddr') {
+          const events = await nostrPool.query(
+            [...new Set([...searchRelays, ...readRelays])],
+            { kinds: [decoded.data.kind], authors: [decoded.data.pubkey], '#d': [decoded.data.identifier], limit: 5 },
+            5000,
+          )
+          const filtered = events.filter((event) => !isEventMuted(event))
+          for (const event of filtered) ingestEvent(event)
+          void fetchProfiles(filtered.map((event) => event.pubkey))
+          setResults(filtered)
+          return
+        }
+      } catch {
+        // Invalid address; continue with contextual text search.
+      } finally {
+        setSearching(false)
+      }
+    }
+
     setSearching(true)
     try {
       const cleanTag = q.startsWith('#') ? q.slice(1).toLowerCase() : null
       const filter = cleanTag
-        ? { kinds: [1, 20], '#t': [cleanTag], limit: 50 }
-        : { kinds: [1], search: q, limit: 40 }
+        ? { kinds: [1, 20, 21, 22, 30023], '#t': [cleanTag], limit: 50 }
+        : { kinds: [1, 20, 21, 22, 30023], search: q, limit: 40 }
 
-      const searchRelays = cleanTag
+      const targetRelays = cleanTag
         ? readRelays
-        : [...new Set([...readRelays, 'wss://relay.nostr.band'])]
+        : [...new Set([...searchRelays, ...readRelays])]
 
-      const evs = await nostrPool.query(searchRelays, filter, 5000)
+      const evs = await nostrPool.query(targetRelays, filter, 5000)
       const filtered = evs.filter((e) => !isEventMuted(e))
       for (const e of filtered) ingestEvent(e)
       void fetchProfiles(filtered.map((e) => e.pubkey))

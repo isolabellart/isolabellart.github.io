@@ -6,10 +6,10 @@ Legenda: `[ ] OK` = comportamento corretto · `[ ] KO` = problema osservato.
 
 ## 1. Accesso, identità e vault
 
-- [ ] OK  [ ] KO — Accesso con estensione NIP-07; chiave privata non richiesta alla pagina.
-  Commento:
-- [ ] OK  [ ] KO — Accesso con Amber/Bunker NIP-46.
-  Commento:
+- [x] OK  [ ] KO — Accesso con estensione NIP-07; chiave privata non richiesta alla pagina.
+  Commento: non è persistente
+- [x] OK  [ ] KO — Accesso con Amber/Bunker NIP-46.
+  Commento: non è persistente e al successivo login non va
 - [ ] OK  [ ] KO — Accesso watch-only con npub e navigazione senza possibilità di firmare.
   Commento:
 - [ ] OK  [ ] KO — Accesso con mnemonic o nsec; logout cancella il signer in memoria.
@@ -23,7 +23,7 @@ Legenda: `[ ] OK` = comportamento corretto · `[ ] KO` = problema osservato.
 
 ## 2. Relay e broadcast delle preferenze
 
-- [ ] OK  [ ] KO — La lista NIP-65 ricevuta (kind 10002) sostituisce i relay predefiniti; marker read/write rispettati.
+- [x] OK  [ ] KO — La lista NIP-65 ricevuta (kind 10002) sostituisce i relay predefiniti; marker read/write rispettati.
   Commento:
 - [ ] OK  [ ] KO — In assenza di un broadcast personale restano disponibili i relay proposti inizialmente.
   Commento:

@@ -55,7 +55,7 @@ export async function buildBlossomAuthHeader(
 export function buildCandidateServers(userServers: string[]): string[] {
   const out: string[] = []
   const seen = new Set<string>()
-  for (const raw of userServers) {
+  for (const raw of [...userServers, DEFAULT_BLOSSOM_PRIMARY, DEFAULT_BLOSSOM_FALLBACK]) {
     const clean = sanitizeBlossomUrl(raw)
     if (clean && !seen.has(clean)) {
       seen.add(clean)
